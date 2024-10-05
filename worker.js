@@ -1,5 +1,3 @@
-const RENAME_NODES = env.RENAME_NODES === 'true';
-
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
@@ -2916,7 +2914,10 @@ var require_js_yaml = __commonJS({
 init_modules_watch_stub();
 var yaml = require_js_yaml();
 var src_default = {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    // 将 RENAME_NODES 的定义移到这里
+    const RENAME_NODES = env.RENAME_NODES === 'true';
+
     const url = new URL(request.url);
     const host = url.origin;
     const frontendUrl = 'https://raw.githubusercontent.com/bulianglin/psub/main/frontend.html';
@@ -2937,6 +2938,7 @@ var src_default = {
           'Content-Type': 'text/html',
         },
       });
+
     } else if (pathSegments[0] === subDir) {
       const key = pathSegments[pathSegments.length - 1];
       const object = await SUB_BUCKET.get(key);
@@ -3071,7 +3073,7 @@ function replaceInUri(link, replacements, isRecovery, subName) {
       return;
   }
 }
-function replaceSSR(link, replacements, isRecovery) {
+function replaceSSR(link, replacements, isRecovery, subName) {
   link = link.slice("ssr://".length).replace("\r", "").split("#")[0];
   link = urlSafeBase64Decode(link);
   const regexMatch = link.match(/(\S+):(\d+?):(\S+?):(\S+?):(\S+?):(\S+)\//);
@@ -3089,6 +3091,15 @@ function replaceSSR(link, replacements, isRecovery) {
     replacements[randomPassword] = urlSafeBase64Decode(password);
     replacedString = "ssr://" + urlSafeBase64Encode(link.replace(server, randomDomain).replace(password, urlSafeBase64Encode(randomPassword)));
   }
+
+  if (RENAME_NODES && subName) {
+    const decodedLink = urlSafeBase64Decode(replacedString.slice(6));
+    const [linkPart, namePart] = decodedLink.split('/?remarks=');
+    const newName = `${decodeURIComponent(namePart || 'SSR')}-${subName}`;
+    const newLink = `${linkPart}/?remarks=${encodeURIComponent(newName)}`;
+    replacedString = 'ssr://' + urlSafeBase64Encode(newLink);
+  }
+
   return replacedString;
 }
 function replaceVmess(link, replacements, isRecovery, subName) {
@@ -3136,7 +3147,6 @@ function replaceVmess(link, replacements, isRecovery, subName) {
     const server = jsonData.add;
     const uuid = jsonData.id;
 
-    // 根据 RENAME_NODES 修改节点名称
     if (RENAME_NODES && subName) {
       jsonData.ps = `${jsonData.ps || server}-${subName}`;
     }
@@ -3144,18 +3154,18 @@ function replaceVmess(link, replacements, isRecovery, subName) {
     const regex = new RegExp(`${uuid}|${server}`, "g");
     let result;
     if (isRecovery) {
-      result = tempLink.replace(regex, (match) => cReplace(match, uuid, replacements[uuid], server, replacements[server]));
+      result = JSON.stringify(jsonData).replace(regex, (match) => cReplace(match, uuid, replacements[uuid], server, replacements[server]));
     } else {
       replacements[randomDomain] = server;
       replacements[randomUUID] = uuid;
-      result = tempLink.replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
+      result = JSON.stringify(jsonData).replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
     }
     return "vmess://" + btoa(result);
   } catch (error) {
     return;
   }
 }
-function replaceSS(link, replacements, isRecovery) {
+function replaceSS(link, replacements, isRecovery, subName) {
   const randomPassword = generateRandomStr(12);
   const randomDomain = randomPassword + ".com";
   let replacedString;
@@ -3198,9 +3208,16 @@ function replaceSS(link, replacements, isRecovery) {
       return;
     }
   }
+
+  if (RENAME_NODES && subName) {
+    const [linkPart, namePart] = replacedString.split('#');
+    const newName = `${decodeURIComponent(namePart || randomDomain)}-${subName}`;
+    replacedString = `${linkPart}#${encodeURIComponent(newName)}`;
+  }
+
   return replacedString;
 }
-function replaceTrojan(link, replacements, isRecovery) {
+function replaceTrojan(link, replacements, isRecovery, subName) {
   const randomUUID = generateRandomUUID();
   const randomDomain = generateRandomStr(10) + ".com";
   const regexMatch = link.match(/(vless|trojan):\/\/(.*?)@(.*):/);
@@ -3211,13 +3228,22 @@ function replaceTrojan(link, replacements, isRecovery) {
   replacements[randomDomain] = server;
   replacements[randomUUID] = uuid;
   const regex = new RegExp(`${uuid}|${server}`, "g");
+  let result;
   if (isRecovery) {
-    return link.replace(regex, (match) => cReplace(match, uuid, replacements[uuid], server, replacements[server]));
+    result = link.replace(regex, (match) => cReplace(match, uuid, replacements[uuid], server, replacements[server]));
   } else {
-    return link.replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
+    result = link.replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
   }
+
+  if (RENAME_NODES && subName) {
+    const [linkPart, namePart] = result.split('#');
+    const newName = `${decodeURIComponent(namePart || randomDomain)}-${subName}`;
+    result = `${linkPart}#${encodeURIComponent(newName)}`;
+  }
+
+  return result;
 }
-function replaceHysteria(link, replacements) {
+function replaceHysteria(link, replacements, subName) {
   const regexMatch = link.match(/hysteria:\/\/(.*):(.*?)\?/);
   if (!regexMatch) {
     return;
@@ -3225,7 +3251,15 @@ function replaceHysteria(link, replacements) {
   const server = regexMatch[1];
   const randomDomain = generateRandomStr(12) + ".com";
   replacements[randomDomain] = server;
-  return link.replace(server, randomDomain);
+  let result = link.replace(server, randomDomain);
+
+  if (RENAME_NODES && subName) {
+    const [linkPart, namePart] = result.split('#');
+    const newName = `${decodeURIComponent(namePart || randomDomain)}-${subName}`;
+    result = `${linkPart}#${encodeURIComponent(newName)}`;
+  }
+
+  return result;
 }
 function replaceYAML(yamlObj, replacements, subName) {
   if (!yamlObj.proxies) {
@@ -3295,4 +3329,3 @@ export {
   src_default as default
 };
 //# sourceMappingURL=index.js.map
-
