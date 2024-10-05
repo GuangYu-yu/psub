@@ -3221,7 +3221,7 @@ function replaceHysteria(link, replacements) {
   replacements[randomDomain] = server;
   return link.replace(server, randomDomain);
 }
-function replaceYAML(yamlObj, replacements) {
+function replaceYAML(yamlObj, replacements, subName) {
   if (!yamlObj.proxies) {
     return;
   }
@@ -3242,15 +3242,29 @@ function replaceYAML(yamlObj, replacements) {
       proxy.uuid = randomUUID;
       replacements[randomUUID] = originalUUID;
     }
+    // 根据 RENAME_NODES 修改节点名称
+    if (RENAME_NODES && subName) {
+      if (typeof proxy.name === 'string') {
+        proxy.name = `${proxy.name || proxy.server}-${subName}`;
+      }
+    }
   });
-  return yaml.dump(yamlObj);
-}
-function urlSafeBase64Encode(input) {
-  return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  try {
+    const yamlString = yaml.dump(yamlObj);
+    yaml.load(yamlString); // 验证 YAML 是否有效
+    return yamlString;
+  } catch (error) {
+    console.error('Invalid YAML:', error);
+    return null; // 或者返回原始的 YAML
+  }
 }
 function urlSafeBase64Decode(input) {
-  const padded = input + "=".repeat((4 - input.length % 4) % 4);
-  return atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - input.length % 4) % 4);
+  return atob(padded);
+}
+function urlSafeBase64Encode(input) {
+  return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 function generateRandomStr(len) {
   return Math.random().toString(36).substring(2, len);
