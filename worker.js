@@ -3033,30 +3033,40 @@ var src_default = {
     for (const key of keys) {
       await SUB_BUCKET.delete(key);
     }
-    if (rpResponse.status === 200) {
-      const plaintextData = await rpResponse.text();
-      try {
-        const decodedData = urlSafeBase64Decode(plaintextData);
-        const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
-        const newLinks = [];
-        for (const link of links) {
-          const newLink = replaceInUri(link, replacements, true);
-          if (newLink)
-            newLinks.push(newLink);
+    // 在 fetch 函数中，修改处理 rpResponse 的部分：
+      if (rpResponse.status === 200) {
+        const plaintextData = await rpResponse.text();
+        let processedData;
+
+        try {
+          // 尝试解码 base64
+          const decodedData = atob(plaintextData);
+          const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
+          const newLinks = [];
+          for (const link of links) {
+            const newLink = replaceInUri(link, replacements, true, url.searchParams.get("url").split('/').pop());
+            if (newLink) newLinks.push(newLink);
+          }
+          processedData = btoa(newLinks.join("\r\n"));
+        } catch (base64Error) {
+          // 如果不是 base64，假设它是 YAML
+          try {
+            const yamlObj = yaml.load(plaintextData);
+            processedData = replaceYAML(yamlObj, replacements, url.searchParams.get("url").split('/').pop());
+          } catch (yamlError) {
+            // 如果既不是 base64 也不是 YAML，则直接应用替换
+            processedData = plaintextData.replace(
+              new RegExp(Object.keys(replacements).join("|"), "g"),
+              (match) => replacements[match] || match
+            );
+          }
         }
-        const replacedBase64Data = btoa(newLinks.join("\r\n"));
-        return new Response(replacedBase64Data, rpResponse);
-      } catch (base64Error) {
-        const result = plaintextData.replace(
-          new RegExp(Object.keys(replacements).join("|"), "g"),
-          (match) => replacements[match] || match
-        );
-        return new Response(result, rpResponse);
+
+        return new Response(processedData, {
+          status: rpResponse.status,
+          headers: rpResponse.headers
+        });
       }
-    }
-    return rpResponse;
-  }
-};
 function renameNode(link, subName) {
   const [linkPart, namePart] = link.split('#');
   const decodedName = decodeURIComponent(namePart || 'Unknown');
