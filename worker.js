@@ -3034,40 +3034,26 @@ var src_default = {
     if (rpResponse.status === 200) {
       const plaintextData = await rpResponse.text();
       try {
-        // 首先尝试Base64解码
         const decodedData = urlSafeBase64Decode(plaintextData);
-        // 检查解码后的数据是否是YAML格式
-        try {
-          const yamlData = yaml.load(decodedData);
-          // 处理YAML数据...
-        } catch (yamlError) {
-          // 如果不是YAML，就按照原来的方式处理
-          const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
-          const newLinks = [];
-          for (const link of links) {
-            const newLink = replaceInUri(link, replacements, true);
-            if (newLink)
-              newLinks.push(newLink);
-          }
-          const replacedBase64Data = btoa(newLinks.join("\r\n"));
-          return new Response(replacedBase64Data, rpResponse);
+        const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
+        const newLinks = [];
+        for (const link of links) {
+          const newLink = replaceInUri(link, replacements, true);
+          if (newLink)
+            newLinks.push(newLink);
         }
+        const replacedBase64Data = btoa(newLinks.join("\r\n"));
+        return new Response(replacedBase64Data, rpResponse);
       } catch (base64Error) {
-        // 如果不是Base64，尝试直接解析为YAML
-        try {
-          const yamlData = yaml.load(plaintextData);
-          // 处理YAML数据...
-        } catch (yamlError) {
-          // 如果既不是Base64也不是YAML，就按原样处理
-          const result = plaintextData.replace(
-            new RegExp(Object.keys(replacements).join("|"), "g"),
-            (match) => replacements[match] || match
-          );
-          return new Response(result, rpResponse);
-        }
+        const result = plaintextData.replace(
+          new RegExp(Object.keys(replacements).join("|"), "g"),
+          (match) => replacements[match] || match
+        );
+        return new Response(result, rpResponse);
       }
     }
-  } 
+    return rpResponse;
+  }
 };
 function replaceInUri(link, replacements, isRecovery, subName) {
   switch (true) {
