@@ -11,6 +11,29 @@ https://youtu.be/X7CC5jrgazo
 
 KV或R2变量名：`SUB_BUCKET`
 
+假设我们有两个订阅链接：
+
+- https://example1.com/sub1
+- https://example2.com/sub2
+
+当 `RENAME_NODES` 为 false 时，节点名称保持原样：
+
+- 节点1
+- 节点2
+- 快速节点
+- 美国节点
+
+当 `RENAME_NODES` 为 true 节点名称会被修改，添加订阅源的信息。例如：
+
+- 节点1-sub1
+- 节点2-sub1
+- 快速节点-sub2
+- 美国节点-sub2
+
+在这个例子中：
+- "sub1" 是从 "https://example1.com/sub1" 提取的
+- "sub2" 是从 "https://example2.com/sub2" 提取的
+
 ### 支持反代转换的协议
  - shadowsocks
  - shadowsocksR
