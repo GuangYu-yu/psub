@@ -3262,32 +3262,48 @@ function replaceHysteria(link, replacements, subName) {
   return result;
 }
 function replaceYAML(yamlObj, replacements, subName) {
-  if (!yamlObj.proxies) {
+  if (!yamlObj || !yamlObj.proxies || !Array.isArray(yamlObj.proxies)) {
+    console.error('Invalid YAML structure');
     return;
   }
-  yamlObj.proxies.forEach((proxy) => {
-    const randomPassword = generateRandomStr(12);
-    const randomDomain = randomPassword + ".com";
-    const originalServer = proxy.server;
-    proxy.server = randomDomain;
-    replacements[randomDomain] = originalServer;
-    if (proxy.password) {
-      const originalPassword = proxy.password;
-      proxy.password = randomPassword;
-      replacements[randomPassword] = originalPassword;
-    }
-    if (proxy.uuid) {
-      const originalUUID = proxy.uuid;
-      const randomUUID = generateRandomUUID();
-      proxy.uuid = randomUUID;
-      replacements[randomUUID] = originalUUID;
-    }
-    // 根据 RENAME_NODES 修改节点名称
-    if (RENAME_NODES && subName) {
-      proxy.name = `${proxy.name || proxy.server}-${subName}`;
-    }
-  });
-  return yaml.dump(yamlObj);
+  
+  try {
+    yamlObj.proxies.forEach((proxy) => {
+      if (typeof proxy !== 'object') {
+        console.error('Invalid proxy object');
+        return;
+      }
+      
+      const randomPassword = generateRandomStr(12);
+      const randomDomain = randomPassword + ".com";
+      const originalServer = proxy.server;
+      proxy.server = randomDomain;
+      replacements[randomDomain] = originalServer;
+      
+      if (proxy.password) {
+        const originalPassword = proxy.password;
+        proxy.password = randomPassword;
+        replacements[randomPassword] = originalPassword;
+      }
+      
+      if (proxy.uuid) {
+        const originalUUID = proxy.uuid;
+        const randomUUID = generateRandomUUID();
+        proxy.uuid = randomUUID;
+        replacements[randomUUID] = originalUUID;
+      }
+      
+      // 根据 RENAME_NODES 修改节点名称
+      if (typeof RENAME_NODES !== 'undefined' && RENAME_NODES && subName) {
+        proxy.name = `${proxy.name || proxy.server}-${subName}`;
+      }
+    });
+    
+    return yaml.dump(yamlObj);
+  } catch (error) {
+    console.error('Error in replaceYAML:', error);
+    return;
+  }
 }
 function urlSafeBase64Encode(input) {
   return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
