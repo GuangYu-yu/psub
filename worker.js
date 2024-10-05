@@ -1,5 +1,3 @@
-const RENAME_NODES = env.RENAME_NODES === 'true';
-
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
@@ -1059,6 +1057,7 @@ var require_default = __commonJS({
     });
   }
 });
+
 // node_modules/js-yaml/lib/loader.js
 var require_loader = __commonJS({
   "node_modules/js-yaml/lib/loader.js"(exports, module) {
@@ -2916,10 +2915,7 @@ var require_js_yaml = __commonJS({
 init_modules_watch_stub();
 var yaml = require_js_yaml();
 var src_default = {
-  async fetch(request, env, ctx) {
-    // 将 RENAME_NODES 的定义移到这里
-    const RENAME_NODES = env.RENAME_NODES === 'true';
-
+  async fetch(request, env) {
     const url = new URL(request.url);
     const host = url.origin;
     const frontendUrl = 'https://raw.githubusercontent.com/bulianglin/psub/main/frontend.html';
@@ -2940,7 +2936,6 @@ var src_default = {
           'Content-Type': 'text/html',
         },
       });
-
     } else if (pathSegments[0] === subDir) {
       const key = pathSegments[pathSegments.length - 1];
       const object = await SUB_BUCKET.get(key);
@@ -2983,7 +2978,6 @@ var src_default = {
       let response, parsedObj;
       for (const url2 of urlParts) {
         const key = generateRandomStr(11);
-        let subName = RENAME_NODES ? (url2.split('/').pop() || 'Unknown') : ''; // 获取订阅名称
         if (url2.startsWith("https://") || url2.startsWith("http://")) {
           response = await fetch(url2, {
             method: request.method,
@@ -3000,15 +2994,17 @@ var src_default = {
           parsedObj = parseData(url2);
         }
         if (/^(ssr?|vmess1?|trojan|vless|hysteria):\/\//.test(url2)) {
-          const newLink = replaceInUri(url2, replacements, false, subName);
-          if (newLink) replacedURIs.push(newLink);
+          const newLink = replaceInUri(url2, replacements, false);
+          if (newLink)
+            replacedURIs.push(newLink);
           continue;
         } else if ("base64" === parsedObj.format) {
           const links = parsedObj.data.split(/\r?\n/).filter((link) => link.trim() !== "");
           const newLinks = [];
           for (const link of links) {
-            const newLink = replaceInUri(link, replacements, false, subName);
-            if (newLink) newLinks.push(newLink);
+            const newLink = replaceInUri(link, replacements, false);
+            if (newLink)
+              newLinks.push(newLink);
           }
           const replacedBase64Data = btoa(newLinks.join("\r\n"));
           if (replacedBase64Data) {
@@ -3017,7 +3013,7 @@ var src_default = {
             replacedURIs.push(`${host}/${subDir}/${key}`);
           }
         } else if ("yaml" === parsedObj.format) {
-          const replacedYAMLData = replaceYAML(parsedObj.data, replacements, subName);
+          const replacedYAMLData = replaceYAML(parsedObj.data, replacements);
           if (replacedYAMLData) {
             await SUB_BUCKET.put(key, replacedYAMLData);
             keys.push(key);
@@ -3033,75 +3029,47 @@ var src_default = {
     for (const key of keys) {
       await SUB_BUCKET.delete(key);
     }
-    // 在 fetch 函数中，修改处理 rpResponse 的部分：
-      if (rpResponse.status === 200) {
-        const plaintextData = await rpResponse.text();
-        let processedData;
-
-        try {
-          // 尝试解码 base64
-          const decodedData = atob(plaintextData);
-          const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
-          const newLinks = [];
-          for (const link of links) {
-            const newLink = replaceInUri(link, replacements, true, url.searchParams.get("url").split('/').pop());
-            if (newLink) newLinks.push(newLink);
-          }
-          processedData = btoa(newLinks.join("\r\n"));
-        } catch (base64Error) {
-          // 如果不是 base64，假设它是 YAML
-          try {
-            const yamlObj = yaml.load(plaintextData);
-            processedData = replaceYAML(yamlObj, replacements, url.searchParams.get("url").split('/').pop());
-          } catch (yamlError) {
-            // 如果既不是 base64 也不是 YAML，则直接应用替换
-            processedData = plaintextData.replace(
-              new RegExp(Object.keys(replacements).join("|"), "g"),
-              (match) => replacements[match] || match
-            );
-          }
+    if (rpResponse.status === 200) {
+      const plaintextData = await rpResponse.text();
+      try {
+        const decodedData = urlSafeBase64Decode(plaintextData);
+        const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
+        const newLinks = [];
+        for (const link of links) {
+          const newLink = replaceInUri(link, replacements, true);
+          if (newLink)
+            newLinks.push(newLink);
         }
-
-        return new Response(processedData, {
-          status: rpResponse.status,
-          headers: rpResponse.headers
-        });
+        const replacedBase64Data = btoa(newLinks.join("\r\n"));
+        return new Response(replacedBase64Data, rpResponse);
+      } catch (base64Error) {
+        const result = plaintextData.replace(
+          new RegExp(Object.keys(replacements).join("|"), "g"),
+          (match) => replacements[match] || match
+        );
+        return new Response(result, rpResponse);
       }
-function renameNode(link, subName) {
-  const [linkPart, namePart] = link.split('#');
-  const decodedName = decodeURIComponent(namePart || 'Unknown');
-  const newName = `${decodedName}-${subName}`;
-  return `${linkPart}#${encodeURIComponent(newName)}`;
-}
-function replaceInUri(link, replacements, isRecovery, subName) {
-  let result;
+    }
+    return rpResponse;
+  }
+};
+function replaceInUri(link, replacements, isRecovery) {
   switch (true) {
     case link.startsWith("ss://"):
-      result = replaceSS(link, replacements, isRecovery);
-      break;
+      return replaceSS(link, replacements, isRecovery);
     case link.startsWith("ssr://"):
-      result = replaceSSR(link, replacements, isRecovery);
-      break;
+      return replaceSSR(link, replacements, isRecovery);
     case link.startsWith("vmess://"):
     case link.startsWith("vmess1://"):
-      result = replaceVmess(link, replacements, isRecovery);
-      break;
+      return replaceVmess(link, replacements, isRecovery);
     case link.startsWith("trojan://"):
     case link.startsWith("vless://"):
-      result = replaceTrojan(link, replacements, isRecovery);
-      break;
+      return replaceTrojan(link, replacements, isRecovery);
     case link.startsWith("hysteria://"):
-      result = replaceHysteria(link, replacements);
-      break;
+      return replaceHysteria(link, replacements);
     default:
       return;
   }
-  
-  if (RENAME_NODES && subName && result) {
-    result = renameNode(result, subName);
-  }
-  
-  return result;
 }
 function replaceSSR(link, replacements, isRecovery) {
   link = link.slice("ssr://".length).replace("\r", "").split("#")[0];
@@ -3136,7 +3104,8 @@ function replaceVmess(link, replacements, isRecovery) {
     replacements[randomDomain] = server;
     replacements[randomUUID] = uuid;
     const newStr = urlSafeBase64Encode(`${cipher}:${randomUUID}@${randomDomain}:${port}`);
-    return link.replace(base64Data, newStr);
+    const result = link.replace(base64Data, newStr);
+    return result;
   }
   const regexMatchKitsunebiStyle = link.match(/vmess1:\/\/(.*?)@(.*):(.*?)\?(.*)/);
   if (regexMatchKitsunebiStyle) {
@@ -3144,7 +3113,8 @@ function replaceVmess(link, replacements, isRecovery) {
     replacements[randomDomain] = server;
     replacements[randomUUID] = uuid;
     const regex = new RegExp(`${uuid}|${server}`, "g");
-    return link.replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
+    const result = link.replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
+    return result;
   }
   let tempLink = link.replace(/vmess:\/\/|vmess1:\/\//g, "");
   try {
@@ -3168,11 +3138,11 @@ function replaceVmess(link, replacements, isRecovery) {
     const regex = new RegExp(`${uuid}|${server}`, "g");
     let result;
     if (isRecovery) {
-      result = JSON.stringify(jsonData).replace(regex, (match) => cReplace(match, uuid, replacements[uuid], server, replacements[server]));
+      result = tempLink.replace(regex, (match) => cReplace(match, uuid, replacements[uuid], server, replacements[server]));
     } else {
       replacements[randomDomain] = server;
       replacements[randomUUID] = uuid;
-      result = JSON.stringify(jsonData).replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
+      result = tempLink.replace(regex, (match) => cReplace(match, uuid, randomUUID, server, randomDomain));
     }
     return "vmess://" + btoa(result);
   } catch (error) {
@@ -3251,7 +3221,7 @@ function replaceHysteria(link, replacements) {
   replacements[randomDomain] = server;
   return link.replace(server, randomDomain);
 }
-function replaceYAML(yamlObj, replacements, subName) {
+function replaceYAML(yamlObj, replacements) {
   if (!yamlObj.proxies) {
     return;
   }
@@ -3271,9 +3241,6 @@ function replaceYAML(yamlObj, replacements, subName) {
       const randomUUID = generateRandomUUID();
       proxy.uuid = randomUUID;
       replacements[randomUUID] = originalUUID;
-    }
-    if (RENAME_NODES && subName) {
-      proxy.name = `${proxy.name || proxy.server}-${subName}`;
     }
   });
   return yaml.dump(yamlObj);
