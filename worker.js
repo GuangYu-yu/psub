@@ -1,3 +1,5 @@
+const RENAME_NODES = env.RENAME_NODES === 'true';
+
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
@@ -94,7 +96,7 @@ var require_exception = __commonJS({
       this.message = formatError(this, false);
       if (Error.captureStackTrace) {
         Error.captureStackTrace(this, this.constructor);
-      } else {
+    } else {
         this.stack = new Error().stack || "";
       }
     }
@@ -1057,7 +1059,6 @@ var require_default = __commonJS({
     });
   }
 });
-
 // node_modules/js-yaml/lib/loader.js
 var require_loader = __commonJS({
   "node_modules/js-yaml/lib/loader.js"(exports, module) {
@@ -2972,12 +2973,13 @@ var src_default = {
         }
       }
     } else {
-      const urlParts = urlParam.split("|").filter((part) => part.trim() !== "");
-      if (urlParts.length === 0)
-        return new Response("There are no valid links", { status: 400 });
-      let response, parsedObj;
-      for (const url2 of urlParts) {
-        const key = generateRandomStr(11);
+const urlParts = urlParam.split("|").filter((part) => part.trim() !== "");
+if (urlParts.length === 0)
+  return new Response("There are no valid links", { status: 400 });
+let response, parsedObj;
+for (const url2 of urlParts) {
+  const key = generateRandomStr(11);
+  let subName = RENAME_NODES ? (url2.split('/').pop() || 'Unknown') : ''; // 获取订阅名称
         if (url2.startsWith("https://") || url2.startsWith("http://")) {
           response = await fetch(url2, {
             method: request.method,
@@ -2993,27 +2995,25 @@ var src_default = {
         } else {
           parsedObj = parseData(url2);
         }
-        if (/^(ssr?|vmess1?|trojan|vless|hysteria):\/\//.test(url2)) {
-          const newLink = replaceInUri(url2, replacements, false);
-          if (newLink)
-            replacedURIs.push(newLink);
-          continue;
-        } else if ("base64" === parsedObj.format) {
-          const links = parsedObj.data.split(/\r?\n/).filter((link) => link.trim() !== "");
-          const newLinks = [];
-          for (const link of links) {
-            const newLink = replaceInUri(link, replacements, false);
-            if (newLink)
-              newLinks.push(newLink);
-          }
+  if (/^(ssr?|vmess1?|trojan|vless|hysteria):\/\//.test(url2)) {
+    const newLink = replaceInUri(url2, replacements, false, subName);
+    if (newLink) replacedURIs.push(newLink);
+    continue;
+  } else if ("base64" === parsedObj.format) {
+    const links = parsedObj.data.split(/\r?\n/).filter((link) => link.trim() !== "");
+    const newLinks = [];
+    for (const link of links) {
+      const newLink = replaceInUri(link, replacements, false, subName);
+      if (newLink) newLinks.push(newLink);
+    }
           const replacedBase64Data = btoa(newLinks.join("\r\n"));
           if (replacedBase64Data) {
             await SUB_BUCKET.put(key, replacedBase64Data);
             keys.push(key);
             replacedURIs.push(`${host}/${subDir}/${key}`);
           }
-        } else if ("yaml" === parsedObj.format) {
-          const replacedYAMLData = replaceYAML(parsedObj.data, replacements);
+  } else if ("yaml" === parsedObj.format) {
+    const replacedYAMLData = replaceYAML(parsedObj.data, replacements, subName);
           if (replacedYAMLData) {
             await SUB_BUCKET.put(key, replacedYAMLData);
             keys.push(key);
@@ -3053,20 +3053,20 @@ var src_default = {
     return rpResponse;
   }
 };
-function replaceInUri(link, replacements, isRecovery) {
+function replaceInUri(link, replacements, isRecovery, subName) {
   switch (true) {
     case link.startsWith("ss://"):
-      return replaceSS(link, replacements, isRecovery);
+      return replaceSS(link, replacements, isRecovery, subName);
     case link.startsWith("ssr://"):
-      return replaceSSR(link, replacements, isRecovery);
+      return replaceSSR(link, replacements, isRecovery, subName);
     case link.startsWith("vmess://"):
     case link.startsWith("vmess1://"):
-      return replaceVmess(link, replacements, isRecovery);
+      return replaceVmess(link, replacements, isRecovery, subName);
     case link.startsWith("trojan://"):
     case link.startsWith("vless://"):
-      return replaceTrojan(link, replacements, isRecovery);
+      return replaceTrojan(link, replacements, isRecovery, subName);
     case link.startsWith("hysteria://"):
-      return replaceHysteria(link, replacements);
+      return replaceHysteria(link, replacements, subName);
     default:
       return;
   }
@@ -3091,7 +3091,7 @@ function replaceSSR(link, replacements, isRecovery) {
   }
   return replacedString;
 }
-function replaceVmess(link, replacements, isRecovery) {
+function replaceVmess(link, replacements, isRecovery, subName) {
   const randomUUID = generateRandomUUID();
   const randomDomain = generateRandomStr(10) + ".com";
   const regexMatchRocketStyle = link.match(/vmess:\/\/([A-Za-z0-9-_]+)\?(.*)/);
@@ -3135,6 +3135,12 @@ function replaceVmess(link, replacements, isRecovery) {
     const jsonData = JSON.parse(tempLink);
     const server = jsonData.add;
     const uuid = jsonData.id;
+
+    // 根据 RENAME_NODES 修改节点名称
+    if (RENAME_NODES && subName) {
+      jsonData.ps = `${jsonData.ps || server}-${subName}`;
+    }
+
     const regex = new RegExp(`${uuid}|${server}`, "g");
     let result;
     if (isRecovery) {
@@ -3221,7 +3227,7 @@ function replaceHysteria(link, replacements) {
   replacements[randomDomain] = server;
   return link.replace(server, randomDomain);
 }
-function replaceYAML(yamlObj, replacements) {
+function replaceYAML(yamlObj, replacements, subName) {
   if (!yamlObj.proxies) {
     return;
   }
@@ -3241,6 +3247,10 @@ function replaceYAML(yamlObj, replacements) {
       const randomUUID = generateRandomUUID();
       proxy.uuid = randomUUID;
       replacements[randomUUID] = originalUUID;
+    }
+    // 根据 RENAME_NODES 修改节点名称
+    if (RENAME_NODES && subName) {
+      proxy.name = `${proxy.name || proxy.server}-${subName}`;
     }
   });
   return yaml.dump(yamlObj);
