@@ -96,7 +96,7 @@ var require_exception = __commonJS({
       this.message = formatError(this, false);
       if (Error.captureStackTrace) {
         Error.captureStackTrace(this, this.constructor);
-    } else {
+      } else {
         this.stack = new Error().stack || "";
       }
     }
@@ -2973,13 +2973,13 @@ var src_default = {
         }
       }
     } else {
-const urlParts = urlParam.split("|").filter((part) => part.trim() !== "");
-if (urlParts.length === 0)
-  return new Response("There are no valid links", { status: 400 });
-let response, parsedObj;
-for (const url2 of urlParts) {
-  const key = generateRandomStr(11);
-  let subName = RENAME_NODES ? (url2.split('/').pop() || 'Unknown') : ''; // 获取订阅名称
+      const urlParts = urlParam.split("|").filter((part) => part.trim() !== "");
+      if (urlParts.length === 0)
+        return new Response("There are no valid links", { status: 400 });
+      let response, parsedObj;
+      for (const url2 of urlParts) {
+        const key = generateRandomStr(11);
+        let subName = RENAME_NODES ? (url2.split('/').pop() || 'Unknown') : ''; // 获取订阅名称
         if (url2.startsWith("https://") || url2.startsWith("http://")) {
           response = await fetch(url2, {
             method: request.method,
@@ -2995,25 +2995,25 @@ for (const url2 of urlParts) {
         } else {
           parsedObj = parseData(url2);
         }
-  if (/^(ssr?|vmess1?|trojan|vless|hysteria):\/\//.test(url2)) {
-    const newLink = replaceInUri(url2, replacements, false, subName);
-    if (newLink) replacedURIs.push(newLink);
-    continue;
-  } else if ("base64" === parsedObj.format) {
-    const links = parsedObj.data.split(/\r?\n/).filter((link) => link.trim() !== "");
-    const newLinks = [];
-    for (const link of links) {
-      const newLink = replaceInUri(link, replacements, false, subName);
-      if (newLink) newLinks.push(newLink);
-    }
+        if (/^(ssr?|vmess1?|trojan|vless|hysteria):\/\//.test(url2)) {
+          const newLink = replaceInUri(url2, replacements, false, subName);
+          if (newLink) replacedURIs.push(newLink);
+          continue;
+        } else if ("base64" === parsedObj.format) {
+          const links = parsedObj.data.split(/\r?\n/).filter((link) => link.trim() !== "");
+          const newLinks = [];
+          for (const link of links) {
+            const newLink = replaceInUri(link, replacements, false, subName);
+            if (newLink) newLinks.push(newLink);
+          }
           const replacedBase64Data = btoa(newLinks.join("\r\n"));
           if (replacedBase64Data) {
             await SUB_BUCKET.put(key, replacedBase64Data);
             keys.push(key);
             replacedURIs.push(`${host}/${subDir}/${key}`);
           }
-  } else if ("yaml" === parsedObj.format) {
-    const replacedYAMLData = replaceYAML(parsedObj.data, replacements, subName);
+        } else if ("yaml" === parsedObj.format) {
+          const replacedYAMLData = replaceYAML(parsedObj.data, replacements, subName);
           if (replacedYAMLData) {
             await SUB_BUCKET.put(key, replacedYAMLData);
             keys.push(key);
@@ -3295,3 +3295,4 @@ export {
   src_default as default
 };
 //# sourceMappingURL=index.js.map
+
