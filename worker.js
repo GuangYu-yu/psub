@@ -3034,26 +3034,40 @@ var src_default = {
     if (rpResponse.status === 200) {
       const plaintextData = await rpResponse.text();
       try {
+        // 首先尝试Base64解码
         const decodedData = urlSafeBase64Decode(plaintextData);
-        const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
-        const newLinks = [];
-        for (const link of links) {
-          const newLink = replaceInUri(link, replacements, true);
-          if (newLink)
-            newLinks.push(newLink);
+        // 检查解码后的数据是否是YAML格式
+        try {
+          const yamlData = yaml.load(decodedData);
+          // 处理YAML数据...
+        } catch (yamlError) {
+          // 如果不是YAML，就按照原来的方式处理
+          const links = decodedData.split(/\r?\n/).filter((link) => link.trim() !== "");
+          const newLinks = [];
+          for (const link of links) {
+            const newLink = replaceInUri(link, replacements, true);
+            if (newLink)
+              newLinks.push(newLink);
+          }
+          const replacedBase64Data = btoa(newLinks.join("\r\n"));
+          return new Response(replacedBase64Data, rpResponse);
         }
-        const replacedBase64Data = btoa(newLinks.join("\r\n"));
-        return new Response(replacedBase64Data, rpResponse);
       } catch (base64Error) {
-        const result = plaintextData.replace(
-          new RegExp(Object.keys(replacements).join("|"), "g"),
-          (match) => replacements[match] || match
-        );
-        return new Response(result, rpResponse);
+        // 如果不是Base64，尝试直接解析为YAML
+        try {
+          const yamlData = yaml.load(plaintextData);
+          // 处理YAML数据...
+        } catch (yamlError) {
+          // 如果既不是Base64也不是YAML，就按原样处理
+          const result = plaintextData.replace(
+            new RegExp(Object.keys(replacements).join("|"), "g"),
+            (match) => replacements[match] || match
+          );
+          return new Response(result, rpResponse);
+        }
       }
     }
-    return rpResponse;
-  }
+  } 
 };
 function replaceInUri(link, replacements, isRecovery, subName) {
   switch (true) {
@@ -3262,48 +3276,32 @@ function replaceHysteria(link, replacements, subName) {
   return result;
 }
 function replaceYAML(yamlObj, replacements, subName) {
-  if (!yamlObj || !yamlObj.proxies || !Array.isArray(yamlObj.proxies)) {
-    console.error('Invalid YAML structure');
+  if (!yamlObj.proxies) {
     return;
   }
-  
-  try {
-    yamlObj.proxies.forEach((proxy) => {
-      if (typeof proxy !== 'object') {
-        console.error('Invalid proxy object');
-        return;
-      }
-      
-      const randomPassword = generateRandomStr(12);
-      const randomDomain = randomPassword + ".com";
-      const originalServer = proxy.server;
-      proxy.server = randomDomain;
-      replacements[randomDomain] = originalServer;
-      
-      if (proxy.password) {
-        const originalPassword = proxy.password;
-        proxy.password = randomPassword;
-        replacements[randomPassword] = originalPassword;
-      }
-      
-      if (proxy.uuid) {
-        const originalUUID = proxy.uuid;
-        const randomUUID = generateRandomUUID();
-        proxy.uuid = randomUUID;
-        replacements[randomUUID] = originalUUID;
-      }
-      
-      // 根据 RENAME_NODES 修改节点名称
-      if (typeof RENAME_NODES !== 'undefined' && RENAME_NODES && subName) {
-        proxy.name = `${proxy.name || proxy.server}-${subName}`;
-      }
-    });
-    
-    return yaml.dump(yamlObj);
-  } catch (error) {
-    console.error('Error in replaceYAML:', error);
-    return;
-  }
+  yamlObj.proxies.forEach((proxy) => {
+    const randomPassword = generateRandomStr(12);
+    const randomDomain = randomPassword + ".com";
+    const originalServer = proxy.server;
+    proxy.server = randomDomain;
+    replacements[randomDomain] = originalServer;
+    if (proxy.password) {
+      const originalPassword = proxy.password;
+      proxy.password = randomPassword;
+      replacements[randomPassword] = originalPassword;
+    }
+    if (proxy.uuid) {
+      const originalUUID = proxy.uuid;
+      const randomUUID = generateRandomUUID();
+      proxy.uuid = randomUUID;
+      replacements[randomUUID] = originalUUID;
+    }
+    // 根据 RENAME_NODES 修改节点名称
+    if (RENAME_NODES && subName) {
+      proxy.name = `${proxy.name || proxy.server}-${subName}`;
+    }
+  });
+  return yaml.dump(yamlObj);
 }
 function urlSafeBase64Encode(input) {
   return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
